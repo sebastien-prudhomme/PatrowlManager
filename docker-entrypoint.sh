@@ -1,8 +1,5 @@
 #!/bin/bash
 
-echo "[+] Wait for DB availability"
-while !</dev/tcp/db/5432; do sleep 1; done
-
 source env3/bin/activate
 
 # Collect static files

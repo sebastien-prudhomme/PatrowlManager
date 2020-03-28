@@ -4,10 +4,6 @@ export RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq}
 
 source env3/bin/activate
 
-# Collect static files
-echo "[+] Collect static files"
-python manage.py collectstatic --noinput
-
 # Apply database migrations
 echo "[+] Make database migrations"
 python manage.py makemigrations

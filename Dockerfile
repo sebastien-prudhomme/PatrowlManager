@@ -22,6 +22,10 @@ RUN /opt/patrowl-manager/env3/bin/pip3 install -r /root/requirements.txt
 COPY . /opt/patrowl-manager/
 COPY app/settings.py.sample /opt/patrowl-manager/app/settings.py
 
+RUN . env3/bin/activate && python manage.py collectstatic --noinput
+RUN rm -rf /opt/patrowl-manager/static
+RUN mv /opt/patrowl-manager/staticfiles /opt/patrowl-manager/static
+
 EXPOSE 8003
 ENTRYPOINT ["/opt/patrowl-manager/docker-entrypoint.sh"]
 CMD ["run"]

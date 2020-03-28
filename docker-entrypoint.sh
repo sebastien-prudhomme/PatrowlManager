@@ -1,4 +1,6 @@
 #!/bin/bash
+export DB_HOST=${DB_HOST:-db}
+export RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq}
 
 source env3/bin/activate
 
@@ -17,8 +19,11 @@ python manage.py migrate
 # Check for first install
 if [ ! -f status.created ]; then
   # Create the default admin user
-  echo "[+] Create the default admin user"
-  echo "from django.contrib.auth import get_user_model; User = get_user_model(); User.objects.create_superuser('admin', 'admin@dev.patrowl.io', 'Bonjour1!')" | python manage.py shell
+  echo "[+] Create the default admin user (if needeed)"
+  # Be careful with Python identation and echo command
+  echo -e "from django.contrib.auth import get_user_model\r\
+User = get_user_model()\r\
+if not User.objects.filter(username='admin').exists(): User.objects.create_superuser('admin', 'admin@dev.patrowl.io', 'Bonjour1!')" | python manage.py shell
 
   # Populate the db with default data
   echo "[+] Populate the db with default data"

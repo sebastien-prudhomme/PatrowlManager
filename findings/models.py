@@ -8,11 +8,11 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.forms.models import model_to_dict
 
-from events.models import Event
-from assets.models import Asset
-from scans.models import Scan
+# from events.models import Event
+# from assets.models import Asset
+# from scans.models import Scan
 from rules.models import Rule
-from engines.models import EnginePolicyScope
+# from engines.models import EnginePolicyScope
 from common.utils.encoding import json_serial
 
 import json
@@ -52,18 +52,17 @@ class FindingManager(models.Manager):
                 models.When(severity='critical', then=models.Value(4)),
                 default=models.Value(0),
                 output_field=models.IntegerField(), )
-            ).order_by('-severity_order', 'asset_name', 'title'
-        )
+            ).order_by('-severity_order', 'asset_name', 'title')
         return qs
 
 
 class RawFinding(models.Model):
-    # asset       = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='raw_findings')
-    asset       = models.ForeignKey(Asset, on_delete=models.CASCADE)
+    # asset       = models.ForeignKey(Asset, on_delete=models.CASCADE)
+    asset       = models.ForeignKey('assets.Asset', on_delete=models.CASCADE)
     asset_name  = models.CharField(max_length=256)
     task_id     = models.UUIDField(default=uuid.uuid4, editable=True)
-    # scan        = models.ForeignKey(Scan, on_delete=models.CASCADE, related_name='raw_findings')
-    scan        = models.ForeignKey(Scan, on_delete=models.CASCADE)
+    # scan        = models.ForeignKey(Scan, on_delete=models.CASCADE)
+    scan        = models.ForeignKey('scans.Scan', on_delete=models.CASCADE)
     owner       = models.ForeignKey(User, on_delete=models.DO_NOTHING)
     title       = models.CharField(max_length=256)
     type        = models.CharField(max_length=50)
@@ -71,9 +70,11 @@ class RawFinding(models.Model):
     confidence  = models.CharField(max_length=10)
     severity    = models.CharField(choices=FINDING_SEVERITIES, default='info', max_length=10)
     severity_num= models.IntegerField(default=1, blank=True, null=True)
-    scopes      = models.ManyToManyField(EnginePolicyScope, blank=True)
+    # scopes      = models.ManyToManyField(EnginePolicyScope, blank=True)
+    scopes      = models.ManyToManyField('engines.EnginePolicyScope', blank=True)
     description = models.TextField()
     solution    = models.TextField(null=True, blank=True)
+    score    = models.IntegerField(default=0, null=True, blank=True)
     raw_data    = JSONField(null=True, blank=True)
     risk_info   = JSONField(null=True, blank=True)
     vuln_refs   = JSONField(null=True, blank=True)
@@ -109,6 +110,8 @@ class RawFinding(models.Model):
             self.severity_num = 3
         elif self.severity == "high":
             self.severity_num = 4
+        elif self.severity == "critical":
+            self.severity_num = 5
         else:
             self.severity_num = 0
         # update the 'updated_at' entry on each update except on creation
@@ -135,6 +138,7 @@ class RawFinding(models.Model):
 
 @receiver(post_save, sender=RawFinding)
 def rawfinding_create_update_log(sender, **kwargs):
+    from events.models import Event
     if kwargs['created']:
         Event.objects.create(message="[RawFinding] New raw finding created (id={}): {}".format(kwargs['instance'].id, kwargs['instance']),
                              type="CREATE", severity="DEBUG")
@@ -145,18 +149,19 @@ def rawfinding_create_update_log(sender, **kwargs):
 
 @receiver(post_delete, sender=RawFinding)
 def rawfinding_delete_log(sender, **kwargs):
+    from events.models import Event
     message = "[RawFinding] Raw finding '{}' deleted (id={})".format(kwargs['instance'], kwargs['instance'].id)[:250]
     Event.objects.create(message=message, type="DELETE", severity="DEBUG")
 
 
 class Finding(models.Model):
     raw_finding = models.ForeignKey(RawFinding, models.SET_NULL, blank=True, null=True)
-    # asset       = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='findings')
-    asset       = models.ForeignKey(Asset, on_delete=models.CASCADE)
+    # asset       = models.ForeignKey(Asset, on_delete=models.CASCADE)
+    asset       = models.ForeignKey('assets.Asset', on_delete=models.CASCADE)
     asset_name  = models.CharField(max_length=256) #todo: delete this
     task_id     = models.UUIDField(default=uuid.uuid4, editable=True)
-    scan        = models.ForeignKey(Scan, on_delete=models.CASCADE, blank=True, null=True)
-    # scan        = models.ForeignKey(Scan, on_delete=models.CASCADE)
+    # scan        = models.ForeignKey(Scan, on_delete=models.CASCADE, blank=True, null=True)
+    scan        = models.ForeignKey('scans.Scan', on_delete=models.CASCADE, blank=True, null=True)
     owner       = models.ForeignKey(User, on_delete=models.DO_NOTHING)
     title       = models.CharField(max_length=256, default='title')
     type        = models.CharField(max_length=50)
@@ -164,9 +169,11 @@ class Finding(models.Model):
     confidence  = models.CharField(max_length=10)
     severity    = models.CharField(choices=FINDING_SEVERITIES, default='info', max_length=10)  # info, low, medium, high, critical
     severity_num= models.IntegerField(default=1, blank=True, null=True)  # info, low, medium, high, critical
-    scopes      = models.ManyToManyField(EnginePolicyScope, blank=True, related_name='finding_scopes')
+    # scopes      = models.ManyToManyField(EnginePolicyScope, blank=True, related_name='finding_scopes')
+    scopes      = models.ManyToManyField('engines.EnginePolicyScope', blank=True, related_name='finding_scopes')
     description = models.TextField()
     solution    = models.TextField(null=True, blank=True)
+    score       = models.IntegerField(default=0, null=True, blank=True)
     raw_data    = JSONField(null=True, blank=True)
     risk_info   = JSONField(null=True, blank=True)
     vuln_refs   = JSONField(null=True, blank=True)
@@ -207,6 +214,8 @@ class Finding(models.Model):
             self.severity_num = 3
         elif self.severity == "high":
             self.severity_num = 4
+        elif self.severity == "critical":
+            self.severity_num = 5
         else:
             self.severity_num = 0
 
@@ -235,6 +244,7 @@ class Finding(models.Model):
 
 @receiver(post_save, sender=Finding)
 def finding_create_update_log(sender, **kwargs):
+    from events.models import Event
     if kwargs['created']:
         Event.objects.create(message="[Finding] New finding created (id={}): {}".format(kwargs['instance'].id, kwargs['instance']),
                              type="CREATE", severity="DEBUG")
@@ -246,6 +256,8 @@ def finding_create_update_log(sender, **kwargs):
 
 @receiver(post_delete, sender=Finding)
 def finding_delete_log(sender, **kwargs):
+    from assets.models import Asset
+    from events.models import Event
     asset = Asset.objects.get(id=kwargs['instance'].asset_id)
     asset.calc_risk_grade()
 
